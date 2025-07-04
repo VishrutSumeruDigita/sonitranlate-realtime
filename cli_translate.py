@@ -416,11 +416,15 @@ Examples:
                 print(f"❌ Error checking live status: {e}")
                 return
         
+        # Use optimized settings for RTX 4090
+        optimized_chunk_duration = max(args.chunk_duration, 20)  # Minimum 20s for RTX 4090
+        optimized_model = "base" if args.model == "small" else args.model  # Use base or larger for RTX 4090
+        
         cli.start_translation(
             youtube_url=youtube_url,
             language=args.language,
-            chunk_duration=args.chunk_duration,
-            transcriber_model=args.model,
+            chunk_duration=optimized_chunk_duration,
+            transcriber_model=optimized_model,
             origin_language=args.origin_language,
             output_file=args.output
         )

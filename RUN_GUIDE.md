@@ -116,6 +116,28 @@ python live_translate.py "https://www.youtube.com/@ZeeNews" tamil
 - Uses `--auto-find` to locate live streams from channel URLs
 - Uses fast settings (20s chunks, small model) for better performance
 
+### **Method 1.6: GPU-Optimized Live Video Script (RTX 4090)**
+
+For maximum performance with RTX 4090:
+
+```bash
+# GPU-optimized translation (auto-detects RTX 4090)
+python gpu_live_translate.py "https://www.youtube.com/@nasa" tamil
+
+# With output file
+python gpu_live_translate.py "https://www.youtube.com/@BBCNews" malayalam bbc_audio.mp3
+
+# Check GPU status and configuration
+python gpu_config.py
+```
+
+**RTX 4090 Optimizations**:
+- Uses `bfloat16` compute type for optimal performance
+- Increased batch size (4) for better GPU utilization
+- Optimized chunk duration (20s) for RTX 4090
+- Uses base model for better quality with GPU acceleration
+- Automatic GPU detection and configuration
+
 **CLI Examples:**
 
 ```bash

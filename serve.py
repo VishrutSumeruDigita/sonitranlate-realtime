@@ -282,13 +282,13 @@ class LiveStreamProcessor:
                 origin_language=self.origin_language,
                 target_language=self.target_language,
                 transcriber_model=self.transcriber_model,
-                compute_type="float16",  # Faster
-                batch_size=1,  # Smaller batch for low latency
+                compute_type="bfloat16",  # Optimized for RTX 4090
+                batch_size=4,  # Increased batch size for RTX 4090
                 output_type="audio (mp3)",
                 mix_method_audio="Adjusting volumes and mixing audio",
                 volume_original_audio=0.1,  # Lower original audio
                 volume_translated_audio=1.0,
-                segment_duration_limit=10,  # Shorter segments
+                segment_duration_limit=15,  # Slightly longer segments for better quality
                 enable_cache=False,  # No caching for real-time
                 is_gui=False
             )
