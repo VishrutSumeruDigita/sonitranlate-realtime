@@ -1,325 +1,419 @@
 #!/usr/bin/env python3
 """
-CLI Tool for SoniTranslate Live Stream Translation
+CLI for SoniTranslate Live Stream Translation
 
-This tool provides command-line interface for translating YouTube live streams
-with support for custom URLs and predefined channels.
+This script provides command-line interface for translating YouTube live streams
+with support for custom URLs and various options.
 """
 
 import argparse
-import asyncio
-import json
 import sys
 import time
+import json
+import requests
 from typing import Optional
-
-from example_client import LiveTranslationClient
 from channel_manager import ChannelManager
 from youtube.youtube_stream_grepper import YouTubeLiveStreamGrabber
-
 
 class CLITranslator:
     """Command-line interface for live stream translation."""
     
     def __init__(self, api_url: str = "http://localhost:8000"):
-        self.client = LiveTranslationClient(api_url)
+        self.api_url = api_url.rstrip('/')
+        self.session = requests.Session()
         self.channel_manager = ChannelManager()
         self.grabber = YouTubeLiveStreamGrabber()
     
-    def list_channels(self, category: Optional[str] = None, language: Optional[str] = None):
-        """List available channels."""
-        if category:
-            channels = self.channel_manager.get_channels_by_category(category)
-            print(f"\n📺 Channels in category '{category}':")
-        elif language:
-            channels = self.channel_manager.get_channels_for_language(language)
-            print(f"\n🎯 Channels supporting '{language}':")
-        else:
-            all_channels = self.channel_manager.get_all_channels()
-            print("\n📺 All Available Channels:")
-            
-            for cat, channel_list in all_channels.items():
-                print(f"\n📂 {cat.upper()}")
-                print("=" * (len(cat) + 4))
-                for channel in channel_list:
-                    print(f"  📺 {channel.name}")
-                    print(f"     URL: {channel.url}")
-                    print(f"     Languages: {', '.join(channel.languages)}")
-                    print()
-            return
-        
-        if not channels:
-            print("  No channels found.")
-            return
-        
-        for i, channel in enumerate(channels, 1):
-            print(f"  {i}. {channel.name}")
-            print(f"     URL: {channel.url}")
-            print(f"     Description: {channel.description}")
-            print(f"     Languages: {', '.join(channel.languages)}")
-            print()
+    def check_server(self) -> bool:
+        """Check if the API server is running."""
+        try:
+            response = self.session.get(f"{self.api_url}/", timeout=5)
+            return response.status_code == 200
+        except requests.exceptions.RequestException:
+            return False
     
-    def check_live_streams(self, urls: list):
-        """Check which URLs have live streams."""
-        print("\n🔍 Checking for live streams...")
-        live_streams = []
-        
-        for url in urls:
-            print(f"  Checking: {url}")
-            try:
-                is_live = self.grabber.is_channel_live(url)
-                if is_live:
-                    stream_info = self.grabber.get_live_stream_url(url)
-                    if stream_info:
-                        print(f"    ✅ LIVE: {stream_info['title']}")
-                        live_streams.append({
-                            'url': url,
-                            'title': stream_info['title'],
-                            'viewers': stream_info.get('view_count', 'N/A')
-                        })
-                    else:
-                        print(f"    ⚠️  Live detection failed")
+    def list_languages(self):
+        """List supported languages."""
+        try:
+            response = self.session.get(f"{self.api_url}/languages")
+            if response.status_code == 200:
+                data = response.json()
+                print("🌍 Supported Languages:")
+                print("=" * 30)
+                for lang, full_name in data['supported_languages'].items():
+                    print(f"  {lang:12} - {full_name}")
+                print(f"\nTotal: {data['total_count']} languages")
+            else:
+                print("❌ Failed to get languages")
+        except Exception as e:
+            print(f"❌ Error: {e}")
+    
+    def list_channels(self, category: Optional[str] = None):
+        """List configured channels."""
+        try:
+            if category:
+                response = self.session.get(f"{self.api_url}/channels/{category}")
+            else:
+                response = self.session.get(f"{self.api_url}/channels")
+            
+            if response.status_code == 200:
+                data = response.json()
+                if category:
+                    print(f"📺 Channels in '{category}' category:")
+                    print("=" * 40)
+                    for channel in data['channels']:
+                        print(f"  📺 {channel['name']}")
+                        print(f"     URL: {channel['url']}")
+                        print(f"     Description: {channel['description']}")
+                        print(f"     Languages: {', '.join(channel['languages'])}")
+                        print()
                 else:
-                    print(f"    📵 Not live")
-            except Exception as e:
-                print(f"    ❌ Error: {e}")
+                    print("📺 Available Channel Categories:")
+                    print("=" * 35)
+                    for cat, channels in data['channels'].items():
+                        print(f"  📂 {cat.upper()} ({len(channels)} channels)")
+                        for channel in channels:
+                            print(f"    - {channel['name']}")
+                        print()
+                    print(f"Total: {data['total_channels']} channels in {data['total_categories']} categories")
+            else:
+                print("❌ Failed to get channels")
+        except Exception as e:
+            print(f"❌ Error: {e}")
+    
+    def find_live_streams(self, limit: int = 5):
+        """Find currently live streams from configured channels."""
+        print("🔍 Searching for live streams...")
+        print("=" * 35)
+        
+        live_streams = []
+        all_channels = self.channel_manager.get_all_channels()
+        
+        for category, channels in all_channels.items():
+            print(f"\n📂 Checking {category} channels...")
+            for channel in channels:
+                try:
+                    print(f"  🔍 {channel.name}...", end=" ")
+                    is_live = self.grabber.is_channel_live(channel.url)
+                    
+                    if is_live:
+                        stream_info = self.grabber.get_live_stream_url(channel.url)
+                        if stream_info:
+                            print("✅ LIVE")
+                            live_streams.append({
+                                'name': channel.name,
+                                'url': channel.url,
+                                'stream_url': stream_info['url'],
+                                'title': stream_info['title'],
+                                'viewers': stream_info.get('view_count', 'N/A'),
+                                'languages': channel.languages
+                            })
+                        else:
+                            print("❌ Error getting stream info")
+                    else:
+                        print("📵 Not live")
+                        
+                except Exception as e:
+                    print(f"❌ Error: {e}")
+        
+        if live_streams:
+            print(f"\n🎬 Found {len(live_streams)} live streams:")
+            print("=" * 40)
+            for i, stream in enumerate(live_streams[:limit], 1):
+                print(f"{i}. {stream['name']}")
+                print(f"   Title: {stream['title']}")
+                print(f"   Viewers: {stream['viewers']}")
+                print(f"   Languages: {', '.join(stream['languages'])}")
+                print(f"   URL: {stream['url']}")
+                print()
+        else:
+            print("\n📵 No live streams found")
         
         return live_streams
     
-    def translate_stream(self, url: str, language: str, 
-                        chunk_duration: int = 30,
-                        transcriber_model: str = "base",
-                        output_file: Optional[str] = None,
-                        monitor_only: bool = False):
-        """Start translation of a live stream."""
+    def start_translation(self, youtube_url: str, language: str, 
+                         chunk_duration: int = 30, 
+                         transcriber_model: str = "base",
+                         origin_language: str = "Automatic detection",
+                         output_file: Optional[str] = None):
+        """Start a translation stream."""
         
-        print(f"\n🚀 Starting {language} translation for: {url}")
-        
-        # Check if stream is live
-        if not self.grabber.is_channel_live(url):
-            print("❌ Error: No live stream found at the provided URL")
-            return None
-        
-        # Start translation
-        result = self.client.start_translation(
-            youtube_url=url,
-            language=language,
-            chunk_duration=chunk_duration,
-            transcriber_model=transcriber_model
-        )
-        
-        if not result:
-            print("❌ Failed to start translation")
-            return None
-        
-        stream_id = result['stream_id']
-        print(f"✅ Translation started! Stream ID: {stream_id}")
-        
-        if monitor_only:
-            return self.monitor_translation(stream_id)
-        
-        # Monitor and optionally stream audio
-        if output_file:
-            print(f"📁 Streaming audio to: {output_file}")
-            try:
-                self.client.stream_audio(stream_id, output_file)
-            except KeyboardInterrupt:
-                print("\n⏹️  Audio streaming stopped by user")
-        
-        return stream_id
-    
-    def monitor_translation(self, stream_id: str, duration: int = 60):
-        """Monitor translation progress."""
-        print(f"\n📊 Monitoring translation (Stream ID: {stream_id})")
-        print("Press Ctrl+C to stop monitoring")
-        
-        start_time = time.time()
+        print(f"🚀 Starting {language} translation...")
+        print(f"   URL: {youtube_url}")
+        print(f"   Chunk duration: {chunk_duration}s")
+        print(f"   Model: {transcriber_model}")
         
         try:
-            while time.time() - start_time < duration:
-                status = self.client.get_status(stream_id)
+            # Start translation
+            payload = {
+                "youtube_url": youtube_url,
+                "chunk_duration": chunk_duration,
+                "transcriber_model": transcriber_model,
+                "origin_language": origin_language
+            }
+            
+            response = self.session.post(f"{self.api_url}/start/{language}", json=payload)
+            
+            if response.status_code == 200:
+                result = response.json()
+                stream_id = result['stream_id']
+                print(f"✅ Translation started! Stream ID: {stream_id}")
                 
-                print(f"\rStatus: {status['status']} | "
-                      f"Chunks: {status['chunks_processed']} | "
-                      f"Duration: {status['total_duration']:.1f}s", end="")
+                # Monitor status
+                self.monitor_translation(stream_id, output_file)
                 
-                if status['status'] == 'error':
-                    print(f"\n❌ Translation error: {status['error_message']}")
-                    break
-                elif status['status'] == 'active':
-                    print(" ✅")
-                    break
+            else:
+                print(f"❌ Failed to start translation: {response.text}")
+                
+        except Exception as e:
+            print(f"❌ Error: {e}")
+    
+    def monitor_translation(self, stream_id: str, output_file: Optional[str] = None):
+        """Monitor translation progress."""
+        print(f"\n📊 Monitoring translation {stream_id}...")
+        print("Press Ctrl+C to stop")
+        
+        try:
+            while True:
+                # Get status
+                response = self.session.get(f"{self.api_url}/status/{stream_id}")
+                if response.status_code == 200:
+                    status = response.json()
+                    
+                    print(f"\rStatus: {status['status']} | "
+                          f"Chunks: {status['chunks_processed']} | "
+                          f"Duration: {status['total_duration']:.1f}s", end="")
+                    
+                    if status['status'] == 'error':
+                        print(f"\n❌ Error: {status['error_message']}")
+                        break
+                    elif status['status'] == 'active':
+                        # Stream audio if output file specified
+                        if output_file:
+                            self.stream_audio_to_file(stream_id, output_file)
+                            break
                 
                 time.sleep(2)
                 
         except KeyboardInterrupt:
-            print("\n⏹️  Monitoring stopped by user")
-        
-        return stream_id
+            print("\n\n🛑 Stopping translation...")
+            self.stop_translation(stream_id)
     
-    def add_channel(self, category: str, name: str, url: str, 
-                   description: str = "", languages: list = None):
-        """Add a new channel to configuration."""
-        if languages is None:
-            languages = ["english"]
+    def stream_audio_to_file(self, stream_id: str, output_file: str):
+        """Stream translated audio to file."""
+        print(f"\n🎵 Streaming audio to {output_file}...")
         
-        self.channel_manager.add_channel(category, name, url, description, languages)
-        print(f"✅ Channel '{name}' added to category '{category}'")
+        try:
+            response = self.session.get(f"{self.api_url}/stream/{stream_id}", stream=True)
+            
+            with open(output_file, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+                        print(f"\rReceived: {len(chunk)} bytes", end="")
+            
+            print(f"\n✅ Audio saved to {output_file}")
+            
+        except Exception as e:
+            print(f"\n❌ Error streaming audio: {e}")
     
-    def remove_channel(self, name: str):
-        """Remove a channel from configuration."""
-        success = self.channel_manager.remove_channel(name)
-        if success:
-            print(f"✅ Channel '{name}' removed successfully")
-        else:
-            print(f"❌ Channel '{name}' not found")
+    def stop_translation(self, stream_id: str):
+        """Stop a translation stream."""
+        try:
+            response = self.session.post(f"{self.api_url}/stop/{stream_id}")
+            if response.status_code == 200:
+                print("✅ Translation stopped")
+            else:
+                print("❌ Failed to stop translation")
+        except Exception as e:
+            print(f"❌ Error stopping translation: {e}")
+    
+    def list_active_streams(self):
+        """List all active translation streams."""
+        try:
+            response = self.session.get(f"{self.api_url}/streams")
+            if response.status_code == 200:
+                data = response.json()
+                if data['active_streams']:
+                    print("🔄 Active Translation Streams:")
+                    print("=" * 35)
+                    for stream in data['active_streams']:
+                        print(f"  📺 {stream['stream_id']}")
+                        print(f"     Language: {stream['language']}")
+                        print(f"     Status: {stream['status']}")
+                        print(f"     Chunks: {stream['chunks_processed']}")
+                        print(f"     Duration: {stream['total_duration']:.1f}s")
+                        print()
+                else:
+                    print("📵 No active translation streams")
+            else:
+                print("❌ Failed to get active streams")
+        except Exception as e:
+            print(f"❌ Error: {e}")
 
 
 def main():
     """Main CLI function."""
     parser = argparse.ArgumentParser(
-        description="SoniTranslate Live Stream CLI Tool",
+        description="SoniTranslate Live Stream Translation CLI",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # List all channels
-  python cli_translate.py --list-channels
-  
-  # Translate NASA live stream to Tamil
-  python cli_translate.py --url "https://www.youtube.com/@nasa/live" --language tamil
-  
-  # Use predefined channel
-  python cli_translate.py --channel "BBC News" --language english
-  
-  # Check live streams
-  python cli_translate.py --check-live "https://www.youtube.com/@nasa/live"
-  
-  # Add custom channel
-  python cli_translate.py --add-channel "My Channel" --url "https://youtube.com/@mychannel" --category entertainment
+  # List supported languages
+  python cli_translate.py languages
+
+  # List configured channels
+  python cli_translate.py channels
+
+  # Find live streams
+  python cli_translate.py find-live
+
+  # Quick live video translation (positional argument)
+  python cli_translate.py live "https://www.youtube.com/@nasa/live" --language tamil
+
+  # Quick live video with fast settings
+  python cli_translate.py live "https://www.youtube.com/@BBCNews/live" --language malayalam --fast
+
+  # Start Tamil translation (positional URL)
+  python cli_translate.py translate "https://www.youtube.com/@nasa/live" --language tamil
+
+  # Start translation with custom settings
+  python cli_translate.py translate "https://www.youtube.com/@BBCNews/live" \\
+    --language malayalam --chunk-duration 20 --model small --output audio.mp3
+
+  # Auto-find live stream from channel URL
+  python cli_translate.py translate "https://www.youtube.com/@nasa" --language tamil --auto-find
+
+  # Check if URL is live before starting
+  python cli_translate.py translate "https://www.youtube.com/@nasa/live" --language tamil --live-check
+
+  # Monitor active streams
+  python cli_translate.py streams
         """
     )
     
-    # Main action arguments
-    action_group = parser.add_mutually_exclusive_group(required=True)
-    action_group.add_argument('--url', help='YouTube live stream URL')
-    action_group.add_argument('--channel', help='Use predefined channel by name')
-    action_group.add_argument('--list-channels', action='store_true', help='List all available channels')
-    action_group.add_argument('--check-live', nargs='+', help='Check if URLs have live streams')
-    action_group.add_argument('--add-channel', help='Add new channel (requires --url and --category)')
-    action_group.add_argument('--remove-channel', help='Remove channel by name')
+    subparsers = parser.add_subparsers(dest='command', help='Available commands')
     
-    # Translation options
-    parser.add_argument('--language', '-l', 
-                       choices=['english', 'tamil', 'malayalam', 'gujarati', 'kannada', 
-                               'marathi', 'japanese', 'korean', 'hindi', 'spanish', 
-                               'french', 'german', 'chinese', 'arabic', 'portuguese', 
-                               'russian', 'italian'],
-                       help='Target language for translation')
+    # Languages command
+    subparsers.add_parser('languages', help='List supported languages')
     
-    parser.add_argument('--chunk-duration', '-d', type=int, default=30,
-                       help='Audio chunk duration in seconds (default: 30)')
+    # Channels command
+    channels_parser = subparsers.add_parser('channels', help='List configured channels')
+    channels_parser.add_argument('--category', help='Show channels in specific category')
     
-    parser.add_argument('--transcriber-model', '-m', 
-                       choices=['base', 'small', 'medium', 'large'], default='base',
-                       help='Whisper model for transcription (default: base)')
+    # Find live streams command
+    subparsers.add_parser('find-live', help='Find currently live streams')
     
-    parser.add_argument('--output-file', '-o', help='Save translated audio to file')
+    # Quick live video command
+    live_parser = subparsers.add_parser('live', help='Quick translation of live video')
+    live_parser.add_argument('youtube_url', help='YouTube live stream URL')
+    live_parser.add_argument('--language', required=True, help='Target language')
+    live_parser.add_argument('--output', help='Output audio file')
+    live_parser.add_argument('--fast', action='store_true', help='Use fast settings (small model, 20s chunks)')
     
-    parser.add_argument('--monitor-only', action='store_true',
-                       help='Only monitor translation, don\'t stream audio')
+    # Translate command
+    translate_parser = subparsers.add_parser('translate', help='Start translation')
+    translate_parser.add_argument('--url', help='YouTube URL (or use positional argument)')
+    translate_parser.add_argument('youtube_url', nargs='?', help='YouTube live stream URL (positional argument)')
+    translate_parser.add_argument('--language', required=True, help='Target language')
+    translate_parser.add_argument('--chunk-duration', type=int, default=30, help='Chunk duration in seconds')
+    translate_parser.add_argument('--model', default='base', help='Transcriber model (base/small/medium/large)')
+    translate_parser.add_argument('--origin-language', default='Automatic detection', help='Source language')
+    translate_parser.add_argument('--output', help='Output audio file')
+    translate_parser.add_argument('--live-check', action='store_true', help='Check if URL is live before starting')
+    translate_parser.add_argument('--auto-find', action='store_true', help='Auto-find live stream from channel URL')
     
-    parser.add_argument('--monitor-duration', type=int, default=60,
-                       help='Duration to monitor translation in seconds (default: 60)')
+    # Streams command
+    subparsers.add_parser('streams', help='List active translation streams')
     
-    # Channel management options
-    parser.add_argument('--category', help='Channel category (for adding channels)')
-    parser.add_argument('--description', help='Channel description (for adding channels)')
-    parser.add_argument('--languages', nargs='+', 
-                       choices=['english', 'tamil', 'malayalam', 'gujarati', 'kannada', 
-                               'marathi', 'japanese', 'korean', 'hindi', 'spanish', 
-                               'french', 'german', 'chinese', 'arabic', 'portuguese', 
-                               'russian', 'italian'],
-                       help='Supported languages for channel (for adding channels)')
-    
-    # Filter options
-    parser.add_argument('--category-filter', help='Filter channels by category')
-    parser.add_argument('--language-filter', help='Filter channels by supported language')
-    
-    # API options
-    parser.add_argument('--api-url', default='http://localhost:8000',
-                       help='API server URL (default: http://localhost:8000)')
+    # Server check
+    parser.add_argument('--api-url', default='http://localhost:8000', help='API server URL')
     
     args = parser.parse_args()
+    
+    if not args.command:
+        parser.print_help()
+        return
     
     # Initialize CLI translator
     cli = CLITranslator(args.api_url)
     
-    try:
-        # Handle different actions
-        if args.list_channels:
-            cli.list_channels(args.category_filter, args.language_filter)
-            
-        elif args.check_live:
-            cli.check_live_streams(args.check_live)
-            
-        elif args.add_channel:
-            if not args.url or not args.category:
-                print("❌ Error: --add-channel requires --url and --category")
-                sys.exit(1)
-            
-            cli.add_channel(
-                category=args.category,
-                name=args.add_channel,
-                url=args.url,
-                description=args.description or "",
-                languages=args.languages or ["english"]
-            )
-            
-        elif args.remove_channel:
-            cli.remove_channel(args.remove_channel)
-            
-        elif args.channel:
-            # Use predefined channel
-            if not args.language:
-                print("❌ Error: --language is required for translation")
-                sys.exit(1)
-            
-            channel = cli.channel_manager.get_channel_by_name(args.channel)
-            if not channel:
-                print(f"❌ Error: Channel '{args.channel}' not found")
-                print("Use --list-channels to see available channels")
-                sys.exit(1)
-            
-            cli.translate_stream(
-                url=channel.url,
-                language=args.language,
-                chunk_duration=args.chunk_duration,
-                transcriber_model=args.transcriber_model,
-                output_file=args.output_file,
-                monitor_only=args.monitor_only
-            )
-            
-        elif args.url:
-            # Use custom URL
-            if not args.language:
-                print("❌ Error: --language is required for translation")
-                sys.exit(1)
-            
-            cli.translate_stream(
-                url=args.url,
-                language=args.language,
-                chunk_duration=args.chunk_duration,
-                transcriber_model=args.transcriber_model,
-                output_file=args.output_file,
-                monitor_only=args.monitor_only
-            )
+    # Check if server is running
+    if not cli.check_server():
+        print("❌ API server is not running!")
+        print("Please start the server first:")
+        print("  python run_serve.py")
+        return
     
-    except KeyboardInterrupt:
-        print("\n⏹️  Operation cancelled by user")
-        sys.exit(0)
-    except Exception as e:
-        print(f"❌ Error: {e}")
-        sys.exit(1)
+    # Execute commands
+    if args.command == 'languages':
+        cli.list_languages()
+    
+    elif args.command == 'channels':
+        cli.list_channels(args.category)
+    
+    elif args.command == 'find-live':
+        cli.find_live_streams()
+    
+    elif args.command == 'live':
+        # Quick live video translation with optimized settings
+        chunk_duration = 20 if args.fast else 30
+        model = 'small' if args.fast else 'base'
+        
+        print(f"🚀 Quick live video translation starting...")
+        print(f"   URL: {args.youtube_url}")
+        print(f"   Language: {args.language}")
+        print(f"   Fast mode: {'Yes' if args.fast else 'No'}")
+        
+        cli.start_translation(
+            youtube_url=args.youtube_url,
+            language=args.language,
+            chunk_duration=chunk_duration,
+            transcriber_model=model,
+            origin_language="Automatic detection",
+            output_file=args.output
+        )
+    
+    elif args.command == 'translate':
+        # Handle URL argument (positional or --url)
+        youtube_url = args.youtube_url or args.url
+        if not youtube_url:
+            print("❌ Error: YouTube URL is required!")
+            print("Usage: python cli_translate.py translate <youtube_url> --language <language>")
+            print("   or: python cli_translate.py translate --url <youtube_url> --language <language>")
+            return
+        
+        # Auto-find live stream if requested
+        if args.auto_find:
+            print(f"🔍 Auto-finding live stream from: {youtube_url}")
+            stream_info = cli.grabber.get_live_stream_url(youtube_url)
+            if stream_info:
+                youtube_url = stream_info['url']
+                print(f"✅ Found live stream: {stream_info['title']}")
+            else:
+                print("❌ No live stream found at the provided URL")
+                return
+        
+        # Check if live before starting
+        if args.live_check:
+            print(f"🔍 Checking if {youtube_url} is live...")
+            if not cli.grabber.is_channel_live(youtube_url):
+                print("❌ Error: No live stream found at the provided URL")
+                print("💡 Try using --auto-find to automatically find the live stream")
+                return
+            print("✅ Live stream confirmed!")
+        
+        cli.start_translation(
+            youtube_url=youtube_url,
+            language=args.language,
+            chunk_duration=args.chunk_duration,
+            transcriber_model=args.model,
+            origin_language=args.origin_language,
+            output_file=args.output
+        )
+    
+    elif args.command == 'streams':
+        cli.list_active_streams()
 
 
 if __name__ == "__main__":
