@@ -1,0 +1,65 @@
+{
+  "channels": {
+    "news": [
+      {
+        "name": "BBC News",
+        "url": "https://www.youtube.com/@BBCNews",
+        "description": "British Broadcasting Corporation news channel",
+        "languages": ["english", "tamil", "hindi"]
+      },
+      {
+        "name": "CNN Breaking",
+        "url": "https://www.youtube.com/@CNNBreaking",
+        "description": "CNN breaking news and live coverage",
+        "languages": ["english", "spanish"]
+      },
+      {
+        "name": "Al Jazeera English",
+        "url": "https://www.youtube.com/@aljazeeraenglish",
+        "description": "International news from Al Jazeera",
+        "languages": ["english", "arabic"]
+      },
+      {
+        "name": "Sky News",
+        "url": "https://www.youtube.com/@SkyNews",
+        "description": "Sky News live coverage",
+        "languages": ["english"]
+      }
+    ],
+    "science": [
+      {
+        "name": "NASA",
+        "url": "https://www.youtube.com/@NASA",
+        "description": "NASA official channel with space missions",
+        "languages": ["english", "japanese", "spanish"]
+      },
+      {
+        "name": "SpaceX",
+        "url": "https://www.youtube.com/@SpaceX",
+        "description": "SpaceX launches and missions",
+        "languages": ["english"]
+      }
+    ],
+    "education": [
+      {
+        "name": "TED",
+        "url": "https://www.youtube.com/@TED",
+        "description": "TED Talks and educational content",
+        "languages": ["english", "tamil", "hindi", "japanese"]
+      }
+    ],
+    "entertainment": [
+      {
+        "name": "Your Custom Channel",
+        "url": "https://www.youtube.com/@YourChannelName",
+        "description": "Add your favorite channels here",
+        "languages": ["tamil", "malayalam", "kannada"]
+      }
+    ]
+  },
+  "default_settings": {
+    "chunk_duration": 30,
+    "transcriber_model": "base",
+    "origin_language": "Automatic detection"
+  }
+} 
