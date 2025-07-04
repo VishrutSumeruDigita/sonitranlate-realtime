@@ -28,9 +28,11 @@ def main():
         print("💡 Make sure the API server is running: python run_serve.py")
         return
     
-    youtube_url = sys.argv[1]
+    youtube_url = sys.argv[1].replace('\\', '')  # Remove escaped characters
     language = sys.argv[2]
     output_file = sys.argv[3] if len(sys.argv) > 3 else None
+    
+    print(f"🔧 Cleaned URL: {youtube_url}")
     
     # Validate language
     supported_languages = [
@@ -54,20 +56,22 @@ def main():
     
     # Build CLI command
     cmd = [
-        sys.executable, 'cli_translate.py', 'live',
+        sys.executable, 'cli_translate.py', 'translate',
         youtube_url,
-        '--language', language
+        '--language', language,
+        '--auto-find'  # Auto-find live stream
     ]
     
     if output_file:
         cmd.extend(['--output', output_file])
     
     # Add fast mode for better performance
-    cmd.append('--fast')
+    cmd.extend(['--chunk-duration', '20', '--model', 'small'])
     
     try:
         # Run the translation
         print("🔄 Starting translation (press Ctrl+C to stop)...")
+        print(f"🔧 Command: {' '.join(cmd)}")
         subprocess.run(cmd, check=True)
         
     except KeyboardInterrupt:
@@ -75,6 +79,7 @@ def main():
     except subprocess.CalledProcessError as e:
         print(f"❌ Translation failed: {e}")
         print("💡 Make sure the API server is running: python run_serve.py")
+        print("💡 Check if the URL is a valid live stream")
     except FileNotFoundError:
         print("❌ cli_translate.py not found!")
         print("💡 Make sure you're running this from the SoniTranslate directory")

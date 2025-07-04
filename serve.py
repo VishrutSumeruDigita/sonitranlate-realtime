@@ -122,14 +122,26 @@ class LiveStreamProcessor:
     async def start_processing(self):
         """Start the live stream processing."""
         try:
+            logger.info(f"Starting live stream processing for: {self.youtube_url}")
+            
             # Get live stream info
             self.stream_info = self.grabber.get_live_stream_url(self.youtube_url)
             if not self.stream_info:
                 self.status = "error"
                 self.error_message = "No live stream found at the provided URL"
+                logger.error(f"No live stream found for: {self.youtube_url}")
                 return
             
-            logger.info(f"Found live stream: {self.stream_info['title']}")
+            logger.info(f"Found live stream: {self.stream_info.get('title', 'Unknown')}")
+            logger.info(f"Stream info keys: {list(self.stream_info.keys())}")
+            
+            # Validate stream info has required fields
+            if 'url' not in self.stream_info:
+                self.status = "error"
+                self.error_message = "Invalid stream info: missing URL"
+                logger.error(f"Invalid stream info: {self.stream_info}")
+                return
+            
             self.status = "active"
             
             # Start audio capture and processing
@@ -143,13 +155,25 @@ class LiveStreamProcessor:
     async def _process_stream(self):
         """Process the live stream in chunks."""
         try:
-            # Get the best audio format
-            audio_format = self.grabber.get_best_audio_format(self.stream_info['url'])
-            if not audio_format:
-                raise Exception("No audio format available")
+            # Get the best audio format from the stream info
+            if 'formats' in self.stream_info and self.stream_info['formats']:
+                # Find best audio format
+                audio_formats = [f for f in self.stream_info['formats'] if f.get('acodec') != 'none']
+                if audio_formats:
+                    # Sort by quality and get the best
+                    audio_formats.sort(key=lambda x: x.get('abr', 0) or x.get('tbr', 0), reverse=True)
+                    stream_url = audio_formats[0]['url']
+                else:
+                    # Fallback to first format
+                    stream_url = self.stream_info['formats'][0]['url']
+            else:
+                # Fallback: get formats from the video URL
+                audio_format = self.grabber.get_best_audio_format(self.stream_info['url'])
+                if not audio_format:
+                    raise Exception("No audio format available")
+                stream_url = audio_format['url']
             
-            stream_url = audio_format['url']
-            logger.info(f"Using audio stream: {stream_url}")
+            logger.info(f"Using audio stream URL: {stream_url}")
             
             # Start FFmpeg process to capture audio chunks
             process = (

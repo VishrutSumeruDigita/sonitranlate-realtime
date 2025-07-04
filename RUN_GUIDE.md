@@ -98,15 +98,23 @@ python cli_translate.py streams
 For the simplest possible usage with live video arguments:
 
 ```bash
-# Super simple: just URL and language
-python live_translate.py "https://www.youtube.com/@nasa/live" tamil
+# Super simple: just URL and language (auto-finds live stream)
+python live_translate.py "https://www.youtube.com/@nasa" tamil
 
 # With output file
-python live_translate.py "https://www.youtube.com/@BBCNews/live" malayalam bbc_audio.mp3
+python live_translate.py "https://www.youtube.com/@BBCNews" malayalam bbc_audio.mp3
 
-# Translate SpaceX launch
+# Direct live stream URL
 python live_translate.py "https://www.youtube.com/@SpaceX/live" japanese
+
+# Channel URL (auto-finds live stream)
+python live_translate.py "https://www.youtube.com/@ZeeNews" tamil
 ```
+
+**Note**: The script automatically:
+- Cleans URLs (removes escaped characters)
+- Uses `--auto-find` to locate live streams from channel URLs
+- Uses fast settings (20s chunks, small model) for better performance
 
 **CLI Examples:**
 
@@ -301,6 +309,15 @@ python cli_translate.py find-live
 python cli_translate.py translate \
   --url "https://www.youtube.com/@nasa/live" \
   --language english
+
+# Use auto-find for channel URLs
+python cli_translate.py translate \
+  --url "https://www.youtube.com/@ZeeNews" \
+  --language tamil \
+  --auto-find
+
+# Clean URLs with escaped characters
+python live_translate.py "https://www.youtube.com/watch?v=abc123" tamil
 ```
 
 **4. Translation errors:**

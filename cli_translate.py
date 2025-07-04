@@ -383,25 +383,42 @@ Examples:
             print("   or: python cli_translate.py translate --url <youtube_url> --language <language>")
             return
         
+        # Clean URL (remove escaped characters)
+        youtube_url = youtube_url.replace('\\', '')
+        
         # Auto-find live stream if requested
         if args.auto_find:
             print(f"🔍 Auto-finding live stream from: {youtube_url}")
-            stream_info = cli.grabber.get_live_stream_url(youtube_url)
-            if stream_info:
-                youtube_url = stream_info['url']
-                print(f"✅ Found live stream: {stream_info['title']}")
-            else:
-                print("❌ No live stream found at the provided URL")
+            try:
+                # First check if it's already a live stream
+                if cli.grabber.is_channel_live(youtube_url):
+                    print(f"✅ URL is already a live stream: {youtube_url}")
+                else:
+                    # Try to find live stream from channel
+                    stream_info = cli.grabber.get_live_stream_url(youtube_url)
+                    if stream_info and stream_info.get('url'):
+                        youtube_url = stream_info['url']
+                        print(f"✅ Found live stream: {stream_info.get('title', 'Unknown')}")
+                    else:
+                        print("❌ No live stream found at the provided URL")
+                        print("💡 The URL might be a direct video URL or the channel is not live")
+                        return
+            except Exception as e:
+                print(f"❌ Error finding live stream: {e}")
                 return
         
         # Check if live before starting
         if args.live_check:
             print(f"🔍 Checking if {youtube_url} is live...")
-            if not cli.grabber.is_channel_live(youtube_url):
-                print("❌ Error: No live stream found at the provided URL")
-                print("💡 Try using --auto-find to automatically find the live stream")
+            try:
+                if not cli.grabber.is_channel_live(youtube_url):
+                    print("❌ Error: No live stream found at the provided URL")
+                    print("💡 Try using --auto-find to automatically find the live stream")
+                    return
+                print("✅ Live stream confirmed!")
+            except Exception as e:
+                print(f"❌ Error checking live status: {e}")
                 return
-            print("✅ Live stream confirmed!")
         
         cli.start_translation(
             youtube_url=youtube_url,
