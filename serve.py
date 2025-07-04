@@ -135,6 +135,14 @@ class LiveStreamProcessor:
             logger.info(f"Found live stream: {self.stream_info.get('title', 'Unknown')}")
             logger.info(f"Stream info keys: {list(self.stream_info.keys())}")
             
+            # Log formats info for debugging
+            if 'formats' in self.stream_info:
+                logger.info(f"Number of formats: {len(self.stream_info['formats'])}")
+                audio_formats = [f for f in self.stream_info['formats'] if f.get('acodec') != 'none']
+                logger.info(f"Number of audio formats: {len(audio_formats)}")
+                if audio_formats:
+                    logger.info(f"Sample audio format keys: {list(audio_formats[0].keys())}")
+            
             # Validate stream info has required fields
             if 'url' not in self.stream_info:
                 self.status = "error"
@@ -160,12 +168,25 @@ class LiveStreamProcessor:
                 # Find best audio format
                 audio_formats = [f for f in self.stream_info['formats'] if f.get('acodec') != 'none']
                 if audio_formats:
-                    # Sort by quality and get the best
-                    audio_formats.sort(key=lambda x: x.get('abr', 0) or x.get('tbr', 0), reverse=True)
+                    # Sort by quality and get the best (handle None values)
+                    audio_formats.sort(key=lambda x: (x.get('abr') or 0) + (x.get('tbr') or 0), reverse=True)
+                    if 'url' not in audio_formats[0]:
+                        raise Exception("Audio format missing URL")
                     stream_url = audio_formats[0]['url']
                 else:
-                    # Fallback to first format
-                    stream_url = self.stream_info['formats'][0]['url']
+                    # Fallback to first format with audio
+                    fallback_formats = [f for f in self.stream_info['formats'] if f.get('acodec') != 'none']
+                    if fallback_formats:
+                        if 'url' not in fallback_formats[0]:
+                            raise Exception("Fallback format missing URL")
+                        stream_url = fallback_formats[0]['url']
+                    else:
+                        # Last resort: any format with URL
+                        url_formats = [f for f in self.stream_info['formats'] if 'url' in f]
+                        if url_formats:
+                            stream_url = url_formats[0]['url']
+                        else:
+                            raise Exception("No valid formats with URL found")
             else:
                 # Fallback: get formats from the video URL
                 audio_format = self.grabber.get_best_audio_format(self.stream_info['url'])

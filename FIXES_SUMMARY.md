@@ -10,7 +10,19 @@
 youtube_url = youtube_url.replace('\\', '')  # Remove escaped characters
 ```
 
-### 2. **Live Stream Detection Failing**
+### 2. **None Comparison Error**
+**Problem**: `'<' not supported between instances of 'NoneType' and 'float'` error when sorting audio formats.
+
+**Fix**: Fixed sorting logic in both `serve.py` and `youtube_stream_grepper.py`:
+```python
+# Before (broken)
+audio_formats.sort(key=lambda x: x.get('abr', 0) or x.get('tbr', 0), reverse=True)
+
+# After (fixed)
+audio_formats.sort(key=lambda x: (x.get('abr') or 0) + (x.get('tbr') or 0), reverse=True)
+```
+
+### 3. **Live Stream Detection Failing**
 **Problem**: Even when live streams were found, the processing was failing with "No live stream found" errors.
 
 **Fix**: 
@@ -18,7 +30,7 @@ youtube_url = youtube_url.replace('\\', '')  # Remove escaped characters
 - Added better error handling and logging
 - Improved stream info validation
 
-### 3. **CLI Argument Parsing Issues**
+### 4. **CLI Argument Parsing Issues**
 **Problem**: Positional arguments weren't working correctly with the CLI.
 
 **Fix**: 
@@ -26,7 +38,7 @@ youtube_url = youtube_url.replace('\\', '')  # Remove escaped characters
 - Added proper argument handling with `--auto-find` flag
 - Improved error messages and debugging output
 
-### 4. **Stream URL Processing**
+### 5. **Stream URL Processing**
 **Problem**: The system was trying to get audio formats from already processed URLs.
 
 **Fix**: 
@@ -40,6 +52,7 @@ youtube_url = youtube_url.replace('\\', '')  # Remove escaped characters
 - Fixed `_process_stream()` method to properly handle stream formats
 - Added better error handling and logging in `start_processing()`
 - Improved stream info validation
+- Fixed None comparison error in audio format sorting
 
 ### `live_translate.py`
 - Added URL cleaning (removes escaped characters)
@@ -52,6 +65,9 @@ youtube_url = youtube_url.replace('\\', '')  # Remove escaped characters
 - Improved auto-find logic with better error handling
 - Added fallback for direct video URLs vs channel URLs
 
+### `youtube/youtube_stream_grepper.py`
+- Fixed None comparison error in audio format sorting
+
 ### `RUN_GUIDE.md`
 - Updated examples to reflect the fixes
 - Added troubleshooting section for common issues
@@ -59,9 +75,13 @@ youtube_url = youtube_url.replace('\\', '')  # Remove escaped characters
 
 ## Testing
 
-Created `test_fixes.py` to verify the fixes work correctly:
+Created test scripts to verify the fixes work correctly:
 ```bash
+# Test general fixes
 python test_fixes.py
+
+# Test None comparison fix specifically
+python test_none_fix.py
 ```
 
 ## Usage Examples

@@ -390,19 +390,15 @@ Examples:
         if args.auto_find:
             print(f"🔍 Auto-finding live stream from: {youtube_url}")
             try:
-                # First check if it's already a live stream
-                if cli.grabber.is_channel_live(youtube_url):
-                    print(f"✅ URL is already a live stream: {youtube_url}")
+                # Try to find live stream from URL (could be channel or direct video)
+                stream_info = cli.grabber.get_live_stream_url(youtube_url)
+                if stream_info and stream_info.get('url'):
+                    youtube_url = stream_info['url']
+                    print(f"✅ Found live stream: {stream_info.get('title', 'Unknown')}")
                 else:
-                    # Try to find live stream from channel
-                    stream_info = cli.grabber.get_live_stream_url(youtube_url)
-                    if stream_info and stream_info.get('url'):
-                        youtube_url = stream_info['url']
-                        print(f"✅ Found live stream: {stream_info.get('title', 'Unknown')}")
-                    else:
-                        print("❌ No live stream found at the provided URL")
-                        print("💡 The URL might be a direct video URL or the channel is not live")
-                        return
+                    print("❌ No live stream found at the provided URL")
+                    print("💡 The URL might not be live or the channel is offline")
+                    return
             except Exception as e:
                 print(f"❌ Error finding live stream: {e}")
                 return

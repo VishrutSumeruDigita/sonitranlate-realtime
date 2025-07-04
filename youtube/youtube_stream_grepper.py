@@ -221,8 +221,8 @@ class YouTubeLiveStreamGrabber:
                 audio_formats = [f for f in formats if f.get('acodec') != 'none']
             
             if audio_formats:
-                # Sort by quality (bitrate or audio quality)
-                audio_formats.sort(key=lambda x: x.get('abr', 0) or x.get('tbr', 0), reverse=True)
+                # Sort by quality (bitrate or audio quality) - handle None values
+                audio_formats.sort(key=lambda x: (x.get('abr') or 0) + (x.get('tbr') or 0), reverse=True)
                 return audio_formats[0]
             
             return None
