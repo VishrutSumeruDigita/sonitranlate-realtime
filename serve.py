@@ -188,44 +188,64 @@ class LiveStreamProcessor:
                         else:
                             raise Exception("No valid formats with URL found")
             else:
-                # Fallback: get formats from the video URL
-                audio_format = self.grabber.get_best_audio_format(self.stream_info['url'])
-                if not audio_format:
-                    raise Exception("No audio format available")
-                stream_url = audio_format['url']
+                # The stream_info['url'] is likely a manifest URL, try to get audio format
+                try:
+                    audio_format = self.grabber.get_best_audio_format(self.stream_info['url'])
+                    if not audio_format:
+                        # If that fails, try using the manifest URL directly
+                        logger.info("Using manifest URL directly for FFmpeg")
+                        stream_url = self.stream_info['url']
+                    else:
+                        stream_url = audio_format['url']
+                except Exception as e:
+                    logger.warning(f"Error getting audio format, using manifest URL: {e}")
+                    stream_url = self.stream_info['url']
             
             logger.info(f"Using audio stream URL: {stream_url}")
             
             # Start FFmpeg process to capture audio chunks
-            process = (
-                ffmpeg
-                .input(stream_url, t=None)  # Continuous input
-                .output('pipe:', format='wav', acodec='pcm_s16le', ac=1, ar='16000')
-                .run_async(pipe_stdout=True, pipe_stderr=True)
-            )
+            try:
+                process = (
+                    ffmpeg
+                    .input(stream_url, t=None)  # Continuous input
+                    .output('pipe:', format='wav', acodec='pcm_s16le', ac=1, ar='16000')
+                    .run_async(pipe_stdout=True, pipe_stderr=True)
+                )
+                logger.info("FFmpeg process started successfully")
+            except Exception as e:
+                logger.error(f"Error starting FFmpeg process: {e}")
+                raise Exception(f"Failed to start audio capture: {e}")
             
             chunk_size = 16000 * self.chunk_duration  # 16kHz * duration in seconds
             audio_buffer = b''
             
             while not self.stop_flag.is_set():
-                # Read audio data from FFmpeg
-                chunk = process.stdout.read(4096)
-                if not chunk:
+                try:
+                    # Read audio data from FFmpeg
+                    chunk = process.stdout.read(4096)
+                    if not chunk:
+                        logger.warning("No audio data received from FFmpeg")
+                        break
+                    
+                    audio_buffer += chunk
+                    
+                    # Process when we have enough audio for a chunk
+                    if len(audio_buffer) >= chunk_size * 2:  # 2 bytes per sample
+                        # Extract one chunk worth of audio
+                        chunk_data = audio_buffer[:chunk_size * 2]
+                        audio_buffer = audio_buffer[chunk_size * 2:]
+                        
+                        # Process this chunk in background
+                        asyncio.create_task(self._process_audio_chunk(chunk_data))
+                        
+                        self.chunks_processed += 1
+                        self.total_duration += self.chunk_duration
+                        
+                        logger.info(f"Processed chunk {self.chunks_processed}, total duration: {self.total_duration}s")
+                        
+                except Exception as e:
+                    logger.error(f"Error in audio processing loop: {e}")
                     break
-                
-                audio_buffer += chunk
-                
-                # Process when we have enough audio for a chunk
-                if len(audio_buffer) >= chunk_size * 2:  # 2 bytes per sample
-                    # Extract one chunk worth of audio
-                    chunk_data = audio_buffer[:chunk_size * 2]
-                    audio_buffer = audio_buffer[chunk_size * 2:]
-                    
-                    # Process this chunk in background
-                    asyncio.create_task(self._process_audio_chunk(chunk_data))
-                    
-                    self.chunks_processed += 1
-                    self.total_duration += self.chunk_duration
             
             # Clean up FFmpeg process
             process.terminate()
